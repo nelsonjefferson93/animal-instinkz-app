@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ARCHETYPES } from '@/lib/archetype/profiles'
+import type { UserArchetype } from '@/types/database'
 import BottomNav from '@/components/layout/BottomNav'
 
 export default async function DashboardPage() {
@@ -18,7 +19,7 @@ export default async function DashboardPage() {
   ])
 
   const profile = profileRes.data
-  const userArchetype = archetypeRes.data
+  const userArchetype = archetypeRes.data as UserArchetype | null
   const hundredProgress = hundredRes.data
   const streak = streakRes.data
 
