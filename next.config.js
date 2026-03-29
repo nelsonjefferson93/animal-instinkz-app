@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// Build: force fresh compile to pick up current env vars
 const nextConfig = {
   images: {
     remotePatterns: [
