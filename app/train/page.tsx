@@ -13,18 +13,26 @@ export default async function TrainPage() {
     supabase.from('users').select('training_mode').eq('id', user.id).single(),
   ])
 
-  const archetypeId = archetypeRes.data?.primary_archetype
-  const trainingMode = profileRes.data?.training_mode ?? 'general'
-  const archetype = archetypeId ? ARCHETYPES[archetypeId as keyof typeof ARCHETYPES] : null
+  const archetypeId = archetypeRes.data?.primary_archetype?.toLowerCase() ?? 'lion'
+  const goal = profileRes.data?.training_mode ?? 'fat_loss'
+  const weekNumber = 1
+  const archetype = ARCHETYPES[archetypeId as keyof typeof ARCHETYPES] ?? null
 
-  // Fetch workout templates for current archetype + mode
-  const { data: templates } = await supabase
-    .from('workout_templates')
-    .select('*')
-    .eq('archetype_id', archetypeId ?? '')
-    .eq('training_mode', trainingMode)
-    .eq('week_number', 1)
-    .order('day_number')
+  const { data: plan } = await supabase
+    .from('training_plans')
+    .select('id')
+    .eq('archetype', archetypeId)
+    .eq('goal', goal)
+    .eq('week_number', weekNumber)
+    .single()
+
+  const { data: days } = plan
+    ? await supabase
+        .from('training_days')
+        .select('*')
+        .eq('training_plan_id', plan.id)
+        .order('day_number')
+    : { data: null }
 
   return (
     <div className="flex flex-col min-h-dvh bg-brand-black pb-24">
@@ -34,26 +42,24 @@ export default async function TrainPage() {
         </p>
         <h1 className="font-display text-5xl text-brand-offwhite">TRAINING</h1>
         <p className="text-brand-gray-muted text-sm mt-1">
-          Week 1 — {trainingMode.replace('_', ' ').toUpperCase()}
+          Week {weekNumber} — {goal.replace('_', ' ').toUpperCase()}
         </p>
       </div>
 
       <div className="page-padding flex flex-col gap-3">
-        {templates && templates.length > 0 ? (
-          templates.map((template) => (
-            <a key={template.id} href={`/train/${template.id}`}>
+        {days && days.length > 0 ? (
+          days.map((day: { id: string; day_number: number; day_name: string; focus: string; notes: string | null }) => (
+            <a key={day.id} href={`/train/${day.id}`}>
               <div className="bg-brand-gray rounded-2xl p-5 flex items-center justify-between active:bg-brand-gray-light transition-colors">
                 <div>
                   <p className="text-brand-gray-muted text-xs uppercase tracking-widest mb-1">
-                    Day {template.day_number}
+                    {day.day_name}
                   </p>
                   <p className="font-heading font-bold text-brand-offwhite text-base">
-                    {template.day_label}
+                    {day.focus}
                   </p>
-                  {template.estimated_duration_min && (
-                    <p className="text-brand-gray-muted text-xs mt-1">
-                      ~{template.estimated_duration_min} min
-                    </p>
+                  {day.notes && (
+                    <p className="text-brand-gray-muted text-xs mt-1">{day.notes}</p>
                   )}
                 </div>
                 <span className="text-brand-green text-xl">→</span>
