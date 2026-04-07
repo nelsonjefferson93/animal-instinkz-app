@@ -48,7 +48,7 @@ export default function ModeSelectPage() {
       longest_streak: 0,
     })
 
-    router.push('/dashboard')
+    router.push('/profile-setup')
   }
 
   return (

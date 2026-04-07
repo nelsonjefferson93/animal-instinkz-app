@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ARCHETYPES } from '@/lib/archetype/profiles'
+import { calculateNutrition, filterMeals } from '@/lib/nutrition/engine'
+import type { User } from '@/types/database'
 import BottomNav from '@/components/layout/BottomNav'
 
 const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -18,13 +20,31 @@ export default async function NutritionPage() {
 
   const [archetypeRes, profileRes] = await Promise.all([
     supabase.from('user_archetypes').select('primary_archetype').eq('user_id', user.id).eq('is_active', true).single(),
-    supabase.from('users').select('training_mode').eq('id', user.id).single(),
+    supabase.from('users').select('*').eq('id', user.id).single(),
   ])
 
   const archetypeId = archetypeRes.data?.primary_archetype?.toLowerCase() ?? 'lion'
-  const goal = profileRes.data?.training_mode ?? 'fat_loss'
+  const profile = profileRes.data as User | null
+  const goal = profile?.training_mode ?? 'fat_loss'
   const archetype = ARCHETYPES[archetypeId as keyof typeof ARCHETYPES] ?? null
 
+  // Get recent adherence for behavioral fallback decision
+  const { data: recentProgress } = await supabase
+    .from('user_progress_logs')
+    .select('habits_completed_rate')
+    .eq('user_id', user.id)
+    .order('week_start', { ascending: false })
+    .limit(1)
+    .single()
+
+  const recentAdherence = recentProgress?.habits_completed_rate ?? undefined
+
+  // Calculate dynamic nutrition targets if profile is complete
+  const calculatedTargets = profile?.profile_complete
+    ? calculateNutrition(profile, recentAdherence)
+    : null
+
+  // Always fetch static plan as fallback
   const { data: plan } = await supabase
     .from('nutrition_plans')
     .select('*')
@@ -39,8 +59,23 @@ export default async function NutritionPage() {
       ])
     : [{ data: [] }, { data: [] }]
 
-  const meals = mealsRes.data ?? []
+  // Filter meals based on dietary preferences if profile is complete
+  const rawMeals = mealsRes.data ?? []
+  const meals = profile?.profile_complete ? filterMeals(rawMeals, profile) : rawMeals
   const tips = tipsRes.data ?? []
+
+  // Determine what targets to show
+  const displayTargets = calculatedTargets ?? (plan ? {
+    calories: plan.calories,
+    protein_g: plan.protein_g,
+    carbs_g: plan.carbs_g,
+    fats_g: plan.fats_g,
+    hydration_liters: plan.hydration_liters,
+    deficit_surplus: 0,
+    tdee: 0,
+    source: 'static' as const,
+    guidance_mode: 'macro' as const,
+  } : null)
 
   return (
     <div className="flex flex-col min-h-dvh bg-brand-black pb-24">
@@ -51,45 +86,98 @@ export default async function NutritionPage() {
         <h1 className="font-display text-5xl text-brand-offwhite">NUTRITION</h1>
         <p className="text-brand-gray-muted text-sm mt-1">
           {goal.replace('_', ' ').toUpperCase()}
+          {calculatedTargets && (
+            <span className="ml-2 text-brand-green">· Personalized</span>
+          )}
         </p>
       </div>
 
-      {plan ? (
+      {/* Targets — behavioral or macro */}
+      {displayTargets ? (
         <>
-          {/* Daily macro targets */}
           <div className="page-padding mb-4">
             <div className="bg-brand-gray rounded-2xl p-5">
-              <p className="text-brand-gray-muted text-xs uppercase tracking-widest mb-3">Daily Targets</p>
-              <div className="grid grid-cols-4 gap-2 text-center">
+              {displayTargets.guidance_mode === 'behavioral' ? (
+                // Low-adherence behavioral mode
                 <div>
-                  <p className="font-heading font-bold text-brand-green text-xl">{plan.calories}</p>
-                  <p className="text-brand-gray-muted text-xs mt-0.5">kcal</p>
+                  <p className="text-brand-gray-muted text-xs uppercase tracking-widest mb-2">Focus Right Now</p>
+                  <p className="text-brand-gray-muted text-sm mb-4 leading-relaxed">
+                    {(displayTargets as typeof calculatedTargets)?.behavioral_reason}
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {((displayTargets as typeof calculatedTargets)?.behavioral_tips ?? []).map((tip, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-brand-green text-sm flex-shrink-0 mt-0.5">→</span>
+                        <p className="text-brand-offwhite text-sm">{tip}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Still show reduced macro summary */}
+                  <div className="mt-4 pt-4 border-t border-brand-gray-light">
+                    <p className="text-brand-gray-muted text-xs uppercase tracking-widest mb-2">Your Targets (Reference)</p>
+                    <div className="grid grid-cols-4 gap-2 text-center opacity-60">
+                      <div>
+                        <p className="font-heading font-bold text-brand-green text-base">{displayTargets.calories}</p>
+                        <p className="text-brand-gray-muted text-xs mt-0.5">kcal</p>
+                      </div>
+                      <div>
+                        <p className="font-heading font-bold text-brand-offwhite text-base">{displayTargets.protein_g}g</p>
+                        <p className="text-brand-gray-muted text-xs mt-0.5">protein</p>
+                      </div>
+                      <div>
+                        <p className="font-heading font-bold text-brand-offwhite text-base">{displayTargets.carbs_g}g</p>
+                        <p className="text-brand-gray-muted text-xs mt-0.5">carbs</p>
+                      </div>
+                      <div>
+                        <p className="font-heading font-bold text-brand-offwhite text-base">{displayTargets.fats_g}g</p>
+                        <p className="text-brand-gray-muted text-xs mt-0.5">fats</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                // Standard macro mode
                 <div>
-                  <p className="font-heading font-bold text-brand-offwhite text-xl">{plan.protein_g}g</p>
-                  <p className="text-brand-gray-muted text-xs mt-0.5">protein</p>
+                  <p className="text-brand-gray-muted text-xs uppercase tracking-widest mb-3">Daily Targets</p>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div>
+                      <p className="font-heading font-bold text-brand-green text-xl">{displayTargets.calories}</p>
+                      <p className="text-brand-gray-muted text-xs mt-0.5">kcal</p>
+                    </div>
+                    <div>
+                      <p className="font-heading font-bold text-brand-offwhite text-xl">{displayTargets.protein_g}g</p>
+                      <p className="text-brand-gray-muted text-xs mt-0.5">protein</p>
+                    </div>
+                    <div>
+                      <p className="font-heading font-bold text-brand-offwhite text-xl">{displayTargets.carbs_g}g</p>
+                      <p className="text-brand-gray-muted text-xs mt-0.5">carbs</p>
+                    </div>
+                    <div>
+                      <p className="font-heading font-bold text-brand-offwhite text-xl">{displayTargets.fats_g}g</p>
+                      <p className="text-brand-gray-muted text-xs mt-0.5">fats</p>
+                    </div>
+                  </div>
+                  {displayTargets.hydration_liters && (
+                    <p className="text-brand-gray-muted text-xs text-center mt-3 border-t border-brand-gray-light pt-3">
+                      Hydration: {displayTargets.hydration_liters}L / day
+                    </p>
+                  )}
+                  {calculatedTargets && calculatedTargets.deficit_surplus !== 0 && (
+                    <p className="text-brand-gray-muted text-xs text-center mt-1">
+                      {calculatedTargets.deficit_surplus < 0
+                        ? `${Math.abs(calculatedTargets.deficit_surplus)} kcal deficit · TDEE ${calculatedTargets.tdee}`
+                        : `${calculatedTargets.deficit_surplus} kcal surplus · TDEE ${calculatedTargets.tdee}`}
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <p className="font-heading font-bold text-brand-offwhite text-xl">{plan.carbs_g}g</p>
-                  <p className="text-brand-gray-muted text-xs mt-0.5">carbs</p>
-                </div>
-                <div>
-                  <p className="font-heading font-bold text-brand-offwhite text-xl">{plan.fats_g}g</p>
-                  <p className="text-brand-gray-muted text-xs mt-0.5">fats</p>
-                </div>
-              </div>
-              {plan.hydration_liters && (
-                <p className="text-brand-gray-muted text-xs text-center mt-3 border-t border-brand-gray-light pt-3">
-                  Hydration: {plan.hydration_liters}L / day
-                </p>
               )}
             </div>
           </div>
 
-          {/* Guidance */}
-          {plan.guidance && (
+          {/* Guidance from static plan */}
+          {plan?.guidance && calculatedTargets?.guidance_mode !== 'behavioral' && (
             <div className="page-padding mb-4">
-              <p className="text-brand-gray-muted text-sm italic leading-relaxed">"{plan.guidance}"</p>
+              <p className="text-brand-gray-muted text-sm italic leading-relaxed">&quot;{plan.guidance}&quot;</p>
             </div>
           )}
 
@@ -164,6 +252,11 @@ export default async function NutritionPage() {
             <p className="text-brand-gray-muted text-sm">
               Macro targets and meal guidance for your archetype will appear here.
             </p>
+            <a href="/profile-setup">
+              <button type="button" className="mt-4 w-full border border-brand-green text-brand-green font-heading font-bold py-3 rounded-lg text-sm uppercase tracking-widest">
+                Complete Profile for Personalized Targets
+              </button>
+            </a>
           </div>
         </div>
       )}

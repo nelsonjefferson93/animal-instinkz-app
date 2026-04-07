@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ARCHETYPES } from '@/lib/archetype/profiles'
+import { getEnvironmentLabel } from '@/lib/training/engine'
 import BottomNav from '@/components/layout/BottomNav'
 
 export default async function TrainPage() {
@@ -10,13 +11,15 @@ export default async function TrainPage() {
 
   const [archetypeRes, profileRes] = await Promise.all([
     supabase.from('user_archetypes').select('primary_archetype').eq('user_id', user.id).eq('is_active', true).single(),
-    supabase.from('users').select('training_mode').eq('id', user.id).single(),
+    supabase.from('users').select('training_mode, workout_environment, equipment_level, profile_complete, session_length_minutes').eq('id', user.id).single(),
   ])
 
   const archetypeId = archetypeRes.data?.primary_archetype?.toLowerCase() ?? 'lion'
   const goal = profileRes.data?.training_mode ?? 'fat_loss'
   const weekNumber = 1
   const archetype = ARCHETYPES[archetypeId as keyof typeof ARCHETYPES] ?? null
+  const profile = profileRes.data
+  const profileComplete = profile?.profile_complete ?? false
 
   const { data: plan } = await supabase
     .from('training_plans')
@@ -34,6 +37,8 @@ export default async function TrainPage() {
         .order('day_number')
     : { data: null }
 
+  const envLabel = profileComplete && profile ? getEnvironmentLabel(profile) : null
+
   return (
     <div className="flex flex-col min-h-dvh bg-brand-black pb-24">
       <div className="page-padding pt-10 pb-4">
@@ -44,6 +49,11 @@ export default async function TrainPage() {
         <p className="text-brand-gray-muted text-sm mt-1">
           Week {weekNumber} — {goal.replace('_', ' ').toUpperCase()}
         </p>
+        {envLabel && (
+          <p className="text-brand-green text-xs font-heading font-bold mt-1">
+            {envLabel.mode} · {envLabel.subtitle}
+          </p>
+        )}
       </div>
 
       <div className="page-padding flex flex-col gap-3">
