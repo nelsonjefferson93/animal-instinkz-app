@@ -21,10 +21,15 @@ export default async function TrainPage() {
   const profile = profileRes.data
   const profileComplete = profile?.profile_complete ?? false
 
+  // Home users get the universal home plan; gym users get their archetype plan
+  const planArchetype = (profile?.profile_complete && profile?.workout_environment === 'home')
+    ? 'home'
+    : archetypeId
+
   const { data: plan } = await supabase
     .from('training_plans')
     .select('id')
-    .eq('archetype', archetypeId)
+    .eq('archetype', planArchetype)
     .eq('goal', goal)
     .eq('week_number', weekNumber)
     .single()
