@@ -8,7 +8,15 @@
 ALTER TABLE training_plans
   DROP CONSTRAINT IF EXISTS training_plans_archetype_goal_week_number_key;
 
--- Add new constraint that includes environment
-ALTER TABLE training_plans
-  ADD CONSTRAINT training_plans_archetype_goal_week_number_env_key
-  UNIQUE (archetype, goal, week_number, environment);
+-- Add new constraint that includes environment (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'training_plans_archetype_goal_week_number_env_key'
+  ) THEN
+    ALTER TABLE training_plans
+      ADD CONSTRAINT training_plans_archetype_goal_week_number_env_key
+      UNIQUE (archetype, goal, week_number, environment);
+  END IF;
+END $$;
