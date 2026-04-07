@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS user_habits (
 ALTER TABLE user_habits ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users own their habits" ON user_habits;
 CREATE POLICY "Users own their habits" ON user_habits FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_user_habits_active ON user_habits(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_user_habits_active ON user_habits(user_id, is_active);
 
 -- ============================================================
 -- 3. USER HABIT LOGS (daily completion log)
@@ -66,4 +66,4 @@ CREATE TABLE IF NOT EXISTS user_habit_logs (
 ALTER TABLE user_habit_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users own habit logs" ON user_habit_logs;
 CREATE POLICY "Users own habit logs" ON user_habit_logs FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_user_habit_logs ON user_habit_logs(user_id, log_date);
+CREATE INDEX IF NOT EXISTS idx_user_habit_logs ON user_habit_logs(user_id, log_date);

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS user_checkins (
 ALTER TABLE user_checkins ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users own checkins" ON user_checkins;
 CREATE POLICY "Users own checkins" ON user_checkins FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_user_checkins ON user_checkins(user_id, checkin_date DESC);
+CREATE INDEX IF NOT EXISTS idx_user_checkins ON user_checkins(user_id, checkin_date DESC);
 
 -- ============================================================
 -- 2. USER PROGRESS LOGS (computed weekly summaries)
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS user_progress_logs (
 ALTER TABLE user_progress_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users own progress logs" ON user_progress_logs;
 CREATE POLICY "Users own progress logs" ON user_progress_logs FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_user_progress_logs ON user_progress_logs(user_id, week_start DESC);
+CREATE INDEX IF NOT EXISTS idx_user_progress_logs ON user_progress_logs(user_id, week_start DESC);
 
 -- ============================================================
 -- 3. ADAPTATION EVENTS (log of all adaptation decisions)
@@ -75,5 +75,5 @@ CREATE TABLE IF NOT EXISTS adaptation_events (
 ALTER TABLE adaptation_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users own adaptation events" ON adaptation_events;
 CREATE POLICY "Users own adaptation events" ON adaptation_events FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_adaptation_events ON adaptation_events(user_id, event_date DESC);
-CREATE INDEX idx_adaptation_active ON adaptation_events(user_id, status) WHERE status IN ('active','pending_approval');
+CREATE INDEX IF NOT EXISTS idx_adaptation_events ON adaptation_events(user_id, event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_adaptation_active ON adaptation_events(user_id, status) WHERE status IN ('active','pending_approval');
