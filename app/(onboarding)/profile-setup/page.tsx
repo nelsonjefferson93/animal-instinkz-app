@@ -3,8 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { assignHabits } from '@/lib/habits/assign'
-import type { ArchetypeId } from '@/types/database'
 
 type Screen = 1 | 2 | 3
 
@@ -103,15 +101,6 @@ export default function ProfileSetupPage() {
 
     const heightInches = parseInt(form.height_ft || '0') * 12 + parseInt(form.height_in || '0')
 
-    // Fetch archetype for habit assignment
-    const { data: archetypeRow } = await supabase
-      .from('user_archetypes')
-      .select('primary_archetype')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .single()
-    const archetypeId = (archetypeRow?.primary_archetype ?? 'wolf') as ArchetypeId
-
     const profileData = {
       height_inches:           heightInches > 0 ? heightInches : null,
       current_weight_lbs:      form.current_weight_lbs ? parseFloat(form.current_weight_lbs) : null,
@@ -144,8 +133,8 @@ export default function ProfileSetupPage() {
       return
     }
 
-    // Assign habits based on profile signals
-    await assignHabits(user.id, { ...profileData, training_mode: undefined }, archetypeId)
+    // Assign habits via server API route
+    await fetch('/api/habits/assign', { method: 'POST' })
 
     router.push('/dashboard')
   }
